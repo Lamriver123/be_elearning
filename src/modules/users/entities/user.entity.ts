@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Class } from '../../classes/entities/class.entity.js';
+import { ClassMember } from '../../classes/entities/class-member.entity.js';
 
 export enum Role {
   TEACHER = 'TEACHER',
@@ -65,6 +68,12 @@ export class User {
 
   @Column({ nullable: true, select: false })
   hashedRefreshToken: string;
+
+  @OneToMany(() => Class, (cls) => cls.teacher)
+  classes: Class[];
+
+  @OneToMany(() => ClassMember, (member) => member.student)
+  joinedClasses: ClassMember[];
 
   @CreateDateColumn()
   createdAt: Date;
