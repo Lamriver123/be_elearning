@@ -20,7 +20,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       # Bỏ comment 2 dòng dưới nếu bạn có viết Unit Test
       # - name: Run Tests
