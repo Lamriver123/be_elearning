@@ -12,6 +12,8 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity.js';
 import { EmailService } from '../../common/email/email.service.js';
+import { AUTH_CONSTANTS } from '../../common/constants/auth.constants.js';
+import { AUTH_MESSAGES } from '../../common/constants/messages.constants.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
@@ -42,7 +44,7 @@ export class AuthService {
       where: { userName },
     });
     if (existingUserName) {
-      throw new ConflictException('Tên đăng nhập đã tồn tại');
+      throw new ConflictException(AUTH_MESSAGES.USERNAME_EXISTS);
     }
 
     // Kiểm tra email đã tồn tại chưa
@@ -50,16 +52,16 @@ export class AuthService {
       where: { email },
     });
     if (existingEmail) {
-      throw new ConflictException('Email đã được sử dụng');
+      throw new ConflictException(AUTH_MESSAGES.EMAIL_EXISTS);
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(AUTH_CONSTANTS.BCRYPT_SALT_ROUNDS);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Sinh OTP
     const otp = this.generateOtp();
-    const otpExpiry = new Date(Date.now() + 60 * 1000); // 1 phút
+    const otpExpiry = new Date(Date.now() + AUTH_CONSTANTS.OTP_EXPIRY_MS);
 
     // Tạo user
     const user = this.usersRepository.create({
@@ -80,7 +82,7 @@ export class AuthService {
     this.logger.log(`User registered: ${email}`);
 
     return {
-      message: 'Đăng ký thành công. Vui lòng kiểm tra email để nhận mã OTP.',
+      message: AUTH_MESSAGES.REGISTER_SUCCESS,
       email: user.email,
     };
   }
@@ -105,23 +107,23 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('Email không tồn tại');
+      throw new NotFoundException(AUTH_MESSAGES.EMAIL_NOT_FOUND);
     }
 
     if (user.isActive) {
-      throw new BadRequestException('Tài khoản đã được kích hoạt');
+      throw new BadRequestException(AUTH_MESSAGES.ACCOUNT_ACTIVE);
     }
 
     if (!user.otp || !user.otpExpiry) {
-      throw new BadRequestException('Không có mã OTP. Vui lòng yêu cầu gửi lại.');
+      throw new BadRequestException(AUTH_MESSAGES.OTP_MISSING);
     }
 
     if (new Date() > user.otpExpiry) {
-      throw new BadRequestException('Mã OTP đã hết hạn. Vui lòng yêu cầu gửi lại.');
+      throw new BadRequestException(AUTH_MESSAGES.OTP_EXPIRED);
     }
 
     if (user.otp !== otp) {
-      throw new BadRequestException('Mã OTP không chính xác');
+      throw new BadRequestException(AUTH_MESSAGES.OTP_INCORRECT);
     }
 
     // Kích hoạt tài khoản và xóa OTP
@@ -134,7 +136,7 @@ export class AuthService {
     this.logger.log(`User verified: ${email}`);
 
     return {
-      message: 'Xác thực OTP thành công. Tài khoản đã được kích hoạt.',
+      message: AUTH_MESSAGES.VERIFY_SUCCESS,
     };
   }
 
@@ -154,16 +156,16 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('Email không tồn tại');
+      throw new NotFoundException(AUTH_MESSAGES.EMAIL_NOT_FOUND);
     }
 
     if (user.isActive) {
-      throw new BadRequestException('Tài khoản đã được kích hoạt');
+      throw new BadRequestException(AUTH_MESSAGES.ACCOUNT_ACTIVE);
     }
 
     // Sinh OTP mới
     const otp = this.generateOtp();
-    const otpExpiry = new Date(Date.now() + 60 * 1000); // 1 phút
+    const otpExpiry = new Date(Date.now() + AUTH_CONSTANTS.OTP_EXPIRY_MS);
 
     await this.usersRepository.update(user.id, { otp, otpExpiry });
 
@@ -173,7 +175,7 @@ export class AuthService {
     this.logger.log(`OTP resent to: ${email}`);
 
     return {
-      message: 'Mã OTP mới đã được gửi đến email của bạn.',
+      message: AUTH_MESSAGES.RESEND_OTP_SUCCESS,
     };
   }
 
@@ -203,27 +205,25 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
+      throw new UnauthorizedException(AUTH_MESSAGES.INVALID_CREDENTIALS);
     }
 
     // Kiểm tra mật khẩu
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
+      throw new UnauthorizedException(AUTH_MESSAGES.INVALID_CREDENTIALS);
     }
 
     // Kiểm tra tài khoản đã kích hoạt chưa
     if (!user.isActive) {
-      throw new UnauthorizedException(
-        'Tài khoản chưa được kích hoạt. Vui lòng xác thực OTP.',
-      );
+      throw new UnauthorizedException(AUTH_MESSAGES.ACCOUNT_INACTIVE);
     }
 
     // Tạo tokens
     const tokens = await this.generateTokens(user);
 
     // Lưu hashed refresh token
-    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, 10);
+    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, AUTH_CONSTANTS.BCRYPT_SALT_ROUNDS);
     await this.usersRepository.update(user.id, { hashedRefreshToken });
 
     // Loại bỏ password khỏi response
@@ -232,7 +232,7 @@ export class AuthService {
     this.logger.log(`User logged in: ${email}`);
 
     return {
-      message: 'Đăng nhập thành công',
+      message: AUTH_MESSAGES.LOGIN_SUCCESS,
       user: userWithoutPassword,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -261,7 +261,7 @@ export class AuthService {
       });
 
       if (!user || !user.hashedRefreshToken) {
-        throw new UnauthorizedException('Refresh token không hợp lệ');
+        throw new UnauthorizedException(AUTH_MESSAGES.INVALID_REFRESH_TOKEN);
       }
 
       // So sánh refresh token
@@ -271,14 +271,14 @@ export class AuthService {
       );
 
       if (!isRefreshTokenValid) {
-        throw new UnauthorizedException('Refresh token không hợp lệ');
+        throw new UnauthorizedException(AUTH_MESSAGES.INVALID_REFRESH_TOKEN);
       }
 
       // Tạo tokens mới
       const tokens = await this.generateTokens(user);
 
       // Cập nhật hashed refresh token
-      const newHashedRefreshToken = await bcrypt.hash(tokens.refreshToken, 10);
+      const newHashedRefreshToken = await bcrypt.hash(tokens.refreshToken, AUTH_CONSTANTS.BCRYPT_SALT_ROUNDS);
       await this.usersRepository.update(user.id, {
         hashedRefreshToken: newHashedRefreshToken,
       });
@@ -288,7 +288,7 @@ export class AuthService {
         refreshToken: tokens.refreshToken,
       };
     } catch {
-      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(AUTH_MESSAGES.REFRESH_EXPIRED);
     }
   }
 
@@ -300,7 +300,7 @@ export class AuthService {
     });
 
     return {
-      message: 'Đăng xuất thành công',
+      message: AUTH_MESSAGES.LOGOUT_SUCCESS,
     };
   }
 
@@ -320,18 +320,16 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('Email không tồn tại trong hệ thống');
+      throw new NotFoundException(AUTH_MESSAGES.EMAIL_NOT_FOUND_FORGOT);
     }
 
     if (!user.isActive) {
-      throw new BadRequestException(
-        'Tài khoản chưa được kích hoạt. Vui lòng xác thực OTP trước.',
-      );
+      throw new BadRequestException(AUTH_MESSAGES.ACCOUNT_INACTIVE_FORGOT);
     }
 
     // Sinh OTP
     const otp = this.generateOtp();
-    const otpExpiry = new Date(Date.now() + 60 * 1000); // 1 phút
+    const otpExpiry = new Date(Date.now() + AUTH_CONSTANTS.OTP_EXPIRY_MS);
 
     await this.usersRepository.update(user.id, { otp, otpExpiry });
 
@@ -341,7 +339,7 @@ export class AuthService {
     this.logger.log(`Forgot password OTP sent to: ${email}`);
 
     return {
-      message: 'Mã OTP đã được gửi đến email của bạn.',
+      message: AUTH_MESSAGES.FORGOT_PASSWORD_SUCCESS,
     };
   }
 
@@ -361,25 +359,23 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('Email không tồn tại');
+      throw new NotFoundException(AUTH_MESSAGES.EMAIL_NOT_FOUND);
     }
 
     if (!user.otp || !user.otpExpiry) {
-      throw new BadRequestException(
-        'Không có yêu cầu đặt lại mật khẩu. Vui lòng yêu cầu lại.',
-      );
+      throw new BadRequestException(AUTH_MESSAGES.NO_RESET_REQUEST);
     }
 
     if (new Date() > user.otpExpiry) {
-      throw new BadRequestException('Mã OTP đã hết hạn. Vui lòng yêu cầu lại.');
+      throw new BadRequestException(AUTH_MESSAGES.OTP_EXPIRED);
     }
 
     if (user.otp !== otp) {
-      throw new BadRequestException('Mã OTP không chính xác');
+      throw new BadRequestException(AUTH_MESSAGES.OTP_INCORRECT);
     }
 
     // Hash mật khẩu mới
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(AUTH_CONSTANTS.BCRYPT_SALT_ROUNDS);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     // Cập nhật mật khẩu và xóa OTP
@@ -392,7 +388,7 @@ export class AuthService {
     this.logger.log(`Password reset for: ${email}`);
 
     return {
-      message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
+      message: AUTH_MESSAGES.RESET_SUCCESS,
     };
   }
 
@@ -404,7 +400,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('Người dùng không tồn tại');
+      throw new NotFoundException(AUTH_MESSAGES.USER_NOT_FOUND);
     }
 
     return user;

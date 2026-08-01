@@ -9,9 +9,17 @@ export class CloudinaryService {
     file: Express.Multer.File,
     folder: string = 'e-learning/classes',
   ): Promise<UploadApiResponse | UploadApiErrorResponse> {
+    return this.uploadFile(file, folder, 'image');
+  }
+
+  async uploadFile(
+    file: Express.Multer.File,
+    folder: string = 'e-learning/general',
+    resourceType: 'auto' | 'image' | 'video' | 'raw' = 'auto',
+  ): Promise<UploadApiResponse | UploadApiErrorResponse> {
     return new Promise((resolve, reject) => {
       const upload = cloudinary.uploader.upload_stream(
-        { folder },
+        { folder, resource_type: resourceType },
         (error, result) => {
           if (error) return reject(error);
           if (result) resolve(result);

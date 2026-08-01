@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import dns from 'node:dns';
 
 // Force IPv4 first - fix cho Supabase DNS chỉ trả về IPv6 trên một số ISP
@@ -9,10 +11,11 @@ dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   // Enable CORS
   app.enableCors({
-    origin: '*',
+    origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:5173'),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -25,6 +28,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Global exception filter
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Global prefix for all routes: /api
   app.setGlobalPrefix('api');

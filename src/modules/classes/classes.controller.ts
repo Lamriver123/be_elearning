@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { Role } from '../users/entities/user.entity.js';
+import type { AuthenticatedRequest } from '../../common/types/request.types.js';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
@@ -60,7 +61,7 @@ export class ClassesController {
   })
   @ApiResponse({ status: 201, description: 'Tạo lớp thành công' })
   create(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() createClassDto: CreateClassDto,
     @UploadedFile(
       new ParseFilePipeBuilder()
@@ -101,7 +102,7 @@ export class ClassesController {
   })
   @ApiResponse({ status: 200, description: 'Cập nhật lớp thành công' })
   update(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateClassDto: UpdateClassDto,
     @UploadedFile(
@@ -126,7 +127,7 @@ export class ClassesController {
   @Roles(Role.TEACHER)
   @ApiOperation({ summary: 'Xóa lớp học (Chỉ Teacher chủ nhiệm)' })
   @ApiResponse({ status: 200, description: 'Xóa lớp thành công' })
-  remove(@Req() req: any, @Param('id') id: string) {
+  remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.classesService.deleteClass(req.user.id, id);
   }
 
@@ -144,7 +145,7 @@ export class ClassesController {
   @ApiOperation({ summary: 'Xin tham gia lớp học bằng mã (Chỉ Student)' })
   @ApiResponse({ status: 201, description: 'Gửi yêu cầu thành công, chờ duyệt' })
   @ApiResponse({ status: 409, description: 'Đã tham gia hoặc đang chờ duyệt' })
-  joinClass(@Req() req: any, @Param('inviteCode') inviteCode: string) {
+  joinClass(@Req() req: AuthenticatedRequest, @Param('inviteCode') inviteCode: string) {
     return this.classesService.joinClass(req.user.id, inviteCode);
   }
 
@@ -153,7 +154,7 @@ export class ClassesController {
   @ApiOperation({ summary: 'Duyệt/từ chối học sinh tham gia lớp (Chỉ Teacher chủ nhiệm)' })
   @ApiResponse({ status: 200, description: 'Đã cập nhật trạng thái học sinh' })
   approveMember(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Param('classId') classId: string,
     @Param('studentId') studentId: string,
     @Body() approveMemberDto: ApproveMemberDto,
@@ -171,7 +172,7 @@ export class ClassesController {
   @ApiOperation({ summary: 'Đuổi học sinh khỏi lớp (Chỉ Teacher chủ nhiệm)' })
   @ApiResponse({ status: 200, description: 'Đã xóa học sinh khỏi lớp' })
   kickMember(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Param('classId') classId: string,
     @Param('studentId') studentId: string,
   ) {
@@ -183,7 +184,7 @@ export class ClassesController {
   @ApiOperation({ summary: 'Mời học sinh tham gia lớp bằng email (Chỉ Teacher chủ nhiệm)' })
   @ApiResponse({ status: 201, description: 'Đã gửi lời mời tham gia lớp tới học sinh' })
   inviteMember(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Param('classId') classId: string,
     @Body() inviteMemberDto: InviteMemberDto,
   ) {
@@ -194,14 +195,25 @@ export class ClassesController {
   @Roles(Role.STUDENT)
   @ApiOperation({ summary: 'Học sinh xác nhận lời mời tham gia lớp' })
   @ApiResponse({ status: 201, description: 'Tham gia lớp thành công' })
-  acceptInvite(@Req() req: any, @Param('classId') classId: string) {
+  acceptInvite(@Req() req: AuthenticatedRequest, @Param('classId') classId: string) {
     return this.classesService.acceptInvite(req.user.id, classId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách lớp học của tôi' })
   @ApiResponse({ status: 200, description: 'Danh sách lớp học' })
-  getMyClasses(@Req() req: any) {
+  getMyClasses(@Req() req: AuthenticatedRequest) {
     return this.classesService.getClassesByRole(req.user.id, req.user.role);
+  }
+
+  @Get(':classId/members')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Lấy danh sách thành viên trong lớp (Chỉ Teacher)' })
+  @ApiResponse({ status: 200, description: 'Danh sách thành viên' })
+  getClassMembers(
+    @Req() req: AuthenticatedRequest,
+    @Param('classId') classId: string,
+  ) {
+    return this.classesService.getClassMembers(req.user.id, classId);
   }
 }

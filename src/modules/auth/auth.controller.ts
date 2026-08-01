@@ -24,13 +24,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { ResendOtpDto } from './dto/resend-otp.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
-import { Request } from 'express';
-import { User } from '../users/entities/user.entity.js';
-
-// Extend Express Request to include user
-interface RequestWithUser extends Request {
-  user: User;
-}
+import type { AuthenticatedRequest } from '../../common/types/request.types.js';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -97,7 +91,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Đăng xuất', description: 'Xóa refresh token khỏi hệ thống. Yêu cầu JWT access token.' })
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công' })
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập hoặc token hết hạn' })
-  async logout(@Req() req: RequestWithUser) {
+  async logout(@Req() req: AuthenticatedRequest) {
     return this.authService.logout(req.user.id);
   }
 
@@ -130,7 +124,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Xem thông tin cá nhân', description: 'Lấy thông tin user đang đăng nhập. Yêu cầu JWT access token.' })
   @ApiResponse({ status: 200, description: 'Trả về thông tin user' })
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập hoặc token hết hạn' })
-  async getProfile(@Req() req: RequestWithUser) {
+  async getProfile(@Req() req: AuthenticatedRequest) {
     return this.authService.getProfile(req.user.id);
   }
 }

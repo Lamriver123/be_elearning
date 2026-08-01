@@ -16,6 +16,8 @@ import { InviteMemberDto } from './dto/invite-member.dto.js';
 import { CloudinaryService } from '../../common/cloudinary/cloudinary.service.js';
 import { User, Role } from '../users/entities/user.entity.js';
 import * as crypto from 'crypto';
+import { AUTH_CONSTANTS } from '../../common/constants/auth.constants.js';
+import { CLASS_MESSAGES } from '../../common/constants/messages.constants.js';
 
 @Injectable()
 export class ClassesService {
@@ -36,7 +38,7 @@ export class ClassesService {
   ) {
     const teacher = await this.usersRepository.findOne({ where: { id: teacherId } });
     if (!teacher || teacher.role !== Role.TEACHER) {
-      throw new ForbiddenException('Chỉ giáo viên mới có thể tạo lớp');
+      throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_CREATE);
     }
 
     let posterUrl: string | undefined;
@@ -49,7 +51,7 @@ export class ClassesService {
     let inviteCode = '';
     let isUnique = false;
     while (!isUnique) {
-      inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+      inviteCode = crypto.randomBytes(AUTH_CONSTANTS.INVITE_CODE_BYTES).toString('hex').toUpperCase();
       const existing = await this.classesRepository.findOne({ where: { inviteCode } });
       if (!existing) {
         isUnique = true;
@@ -66,7 +68,7 @@ export class ClassesService {
     await this.classesRepository.save(newClass);
 
     return {
-      message: 'Tạo lớp học thành công',
+      message: CLASS_MESSAGES.CREATE_SUCCESS,
       class: {
         id: newClass.id,
         name: newClass.name,
@@ -87,8 +89,8 @@ export class ClassesService {
       relations: { teacher: true },
     });
 
-    if (!classInfo) throw new NotFoundException('Không tìm thấy lớp học');
-    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException('Chỉ giáo viên chủ nhiệm mới có thể sửa lớp');
+    if (!classInfo) throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
+    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_UPDATE);
 
     let posterUrl = classInfo.poster;
     if (posterFile) {
@@ -100,7 +102,7 @@ export class ClassesService {
     classInfo.poster = posterUrl;
 
     await this.classesRepository.save(classInfo);
-    return { message: 'Cập nhật lớp học thành công', class: { id: classInfo.id, name: classInfo.name, poster: classInfo.poster } };
+    return { message: CLASS_MESSAGES.UPDATE_SUCCESS, class: { id: classInfo.id, name: classInfo.name, poster: classInfo.poster } };
   }
 
   async deleteClass(teacherId: string, classId: string) {
@@ -109,11 +111,11 @@ export class ClassesService {
       relations: { teacher: true },
     });
 
-    if (!classInfo) throw new NotFoundException('Không tìm thấy lớp học');
-    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException('Chỉ giáo viên chủ nhiệm mới có thể xóa lớp');
+    if (!classInfo) throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
+    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_DELETE);
 
     await this.classesRepository.remove(classInfo);
-    return { message: 'Xóa lớp học thành công' };
+    return { message: CLASS_MESSAGES.DELETE_SUCCESS };
   }
 
   async previewClassByInviteCode(inviteCode: string) {
@@ -123,7 +125,7 @@ export class ClassesService {
     });
 
     if (!classInfo) {
-      throw new NotFoundException('Không tìm thấy lớp học với mã này');
+      throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND_CODE);
     }
 
     return {
@@ -138,12 +140,12 @@ export class ClassesService {
   async joinClass(studentId: string, inviteCode: string) {
     const student = await this.usersRepository.findOne({ where: { id: studentId } });
     if (!student || student.role !== Role.STUDENT) {
-      throw new ForbiddenException('Chỉ học sinh mới có thể tham gia lớp');
+      throw new ForbiddenException(CLASS_MESSAGES.STUDENT_ONLY_JOIN);
     }
 
     const classInfo = await this.classesRepository.findOne({ where: { inviteCode } });
     if (!classInfo) {
-      throw new NotFoundException('Không tìm thấy lớp học với mã này');
+      throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND_CODE);
     }
 
     const existingMember = await this.classMembersRepository.findOne({
@@ -165,7 +167,7 @@ export class ClassesService {
     await this.classMembersRepository.save(classMember);
 
     return {
-      message: 'Xin tham gia lớp thành công. Vui lòng chờ giáo viên duyệt.',
+      message: CLASS_MESSAGES.JOIN_SUCCESS,
     };
   }
 
@@ -181,11 +183,11 @@ export class ClassesService {
     });
 
     if (!classInfo) {
-      throw new NotFoundException('Không tìm thấy lớp học');
+      throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
     }
 
     if (classInfo.teacher.id !== teacherId) {
-      throw new ForbiddenException('Bạn không phải giáo viên chủ nhiệm của lớp này');
+      throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_APPROVE);
     }
 
     const member = await this.classMembersRepository.findOne({
@@ -193,18 +195,18 @@ export class ClassesService {
     });
 
     if (!member) {
-      throw new NotFoundException('Không tìm thấy học sinh trong danh sách chờ');
+      throw new NotFoundException(CLASS_MESSAGES.STUDENT_NOT_FOUND_WAITING);
     }
 
     if (member.status !== MemberStatus.PENDING) {
-      throw new BadRequestException('Học sinh này đã được duyệt hoặc từ chối trước đó');
+      throw new BadRequestException(CLASS_MESSAGES.STUDENT_ALREADY_PROCESSED);
     }
     
     if (
       approveMemberDto.status !== MemberStatus.APPROVED &&
       approveMemberDto.status !== MemberStatus.REJECTED
     ) {
-      throw new BadRequestException('Trạng thái không hợp lệ');
+      throw new BadRequestException(CLASS_MESSAGES.INVALID_STATUS);
     }
 
     if (approveMemberDto.status === MemberStatus.REJECTED) {
@@ -227,17 +229,17 @@ export class ClassesService {
       relations: { teacher: true },
     });
 
-    if (!classInfo) throw new NotFoundException('Không tìm thấy lớp học');
-    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException('Chỉ giáo viên chủ nhiệm mới có thể kick học sinh');
+    if (!classInfo) throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
+    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_KICK);
 
     const member = await this.classMembersRepository.findOne({
       where: { classInfo: { id: classId }, student: { id: studentId } },
     });
 
-    if (!member) throw new NotFoundException('Không tìm thấy học sinh trong lớp');
+    if (!member) throw new NotFoundException(CLASS_MESSAGES.STUDENT_NOT_FOUND);
 
     await this.classMembersRepository.remove(member);
-    return { message: 'Đã xóa học sinh khỏi lớp' };
+    return { message: CLASS_MESSAGES.KICK_SUCCESS };
   }
 
   async inviteMember(teacherId: string, classId: string, inviteMemberDto: InviteMemberDto) {
@@ -246,12 +248,12 @@ export class ClassesService {
       relations: { teacher: true },
     });
 
-    if (!classInfo) throw new NotFoundException('Không tìm thấy lớp học');
-    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException('Chỉ giáo viên chủ nhiệm mới có quyền mời');
+    if (!classInfo) throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
+    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_INVITE);
 
     const student = await this.usersRepository.findOne({ where: { email: inviteMemberDto.email } });
     if (!student || student.role !== Role.STUDENT) {
-      throw new NotFoundException('Không tìm thấy học sinh với email này');
+      throw new NotFoundException(CLASS_MESSAGES.STUDENT_NOT_FOUND_EMAIL);
     }
 
     const existingMember = await this.classMembersRepository.findOne({
@@ -269,7 +271,7 @@ export class ClassesService {
     });
 
     await this.classMembersRepository.save(classMember);
-    return { message: 'Đã gửi lời mời tham gia lớp tới học sinh' };
+    return { message: CLASS_MESSAGES.INVITE_SUCCESS };
   }
 
   async acceptInvite(studentId: string, classId: string) {
@@ -278,12 +280,12 @@ export class ClassesService {
     });
 
     if (!member || member.status !== MemberStatus.INVITED) {
-      throw new NotFoundException('Không tìm thấy lời mời tham gia lớp hợp lệ');
+      throw new NotFoundException(CLASS_MESSAGES.INVITE_NOT_FOUND);
     }
 
     member.status = MemberStatus.APPROVED;
     await this.classMembersRepository.save(member);
-    return { message: 'Bạn đã tham gia lớp học thành công' };
+    return { message: CLASS_MESSAGES.ACCEPT_INVITE_SUCCESS };
   }
 
   async getClassesByRole(userId: string, role: Role) {
@@ -315,5 +317,39 @@ export class ClassesService {
       }));
     }
     return [];
+  }
+
+  async getClassMembers(teacherId: string, classId: string) {
+    const classInfo = await this.classesRepository.findOne({
+      where: { id: classId },
+      relations: { teacher: true },
+    });
+
+    if (!classInfo) throw new NotFoundException(CLASS_MESSAGES.NOT_FOUND);
+    if (classInfo.teacher.id !== teacherId) throw new ForbiddenException(CLASS_MESSAGES.TEACHER_ONLY_UPDATE);
+
+    const members = await this.classMembersRepository.find({
+      where: { classInfo: { id: classId } },
+      relations: { student: true },
+      order: { joinedAt: 'DESC' },
+    });
+
+    return members.map(m => ({
+      id: m.id,
+      status: m.status,
+      joinedAt: m.joinedAt,
+      student: {
+        id: m.student.id,
+        fullName: m.student.fullName,
+        userName: m.student.userName,
+        email: m.student.email,
+        phone: m.student.phone,
+        avatar: m.student.avatar,
+        gender: m.student.gender,
+        dateOfBirth: m.student.dateOfBirth,
+        address: m.student.address,
+        createdAt: m.student.createdAt,
+      },
+    }));
   }
 }
