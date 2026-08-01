@@ -1,0 +1,35 @@
+name: Deploy Backend to Render
+
+on:
+  push:
+    branches:
+      - main  # Thay bằng nhánh bạn muốn trigger deploy
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Phiên bản Node.js bạn sử dụng
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Bỏ comment 2 dòng dưới nếu bạn có viết Unit Test
+      # - name: Run Tests
+      #   run: npm run test
+
+      - name: Build Project
+        run: npm run build
+
+      - name: Trigger Render Deploy
+        if: success() # Chỉ deploy nếu các bước trên thành công
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
