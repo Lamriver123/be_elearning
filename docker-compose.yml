@@ -1,0 +1,12 @@
+services:
+  backend:
+    build: .
+    container_name: e-learning-be
+
+    ports:
+      - "3000:3000"
+
+    env_file:
+      - .env
+
+    restart: unless-stopped
