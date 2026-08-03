@@ -18,6 +18,8 @@ import { CreateExamDto, AssignExamDto } from './dto/create-exam.dto.js';
 import { UpdateExamDto } from './dto/update-exam.dto.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { CreateQuestionDto } from './dto/create-question.dto.js';
+import { UpdateSectionDto } from './dto/update-section.dto.js';
+import { UpdateQuestionDto } from './dto/update-question.dto.js';
 import { ConfirmExcelImportDto } from './dto/import-excel.dto.js';
 import { SubmitAnswerDto } from './dto/submit-answer.dto.js';
 import { GradeAnswerDto } from './dto/grade-answer.dto.js';
@@ -124,16 +126,69 @@ export class ExamsController {
     return this.examsService.addSection(req.user.id, examId, createSectionDto);
   }
 
+  @Patch(':examId/sections/:sectionId')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Sửa phần thi (Section)' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  updateSection(
+    @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
+    @Param('sectionId') sectionId: string,
+    @Body() updateSectionDto: UpdateSectionDto,
+  ) {
+    return this.examsService.updateSection(req.user.id, examId, sectionId, updateSectionDto);
+  }
+
+  @Delete(':examId/sections/:sectionId')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Xóa phần thi (Section)' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  deleteSection(
+    @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
+    @Param('sectionId') sectionId: string,
+  ) {
+    return this.examsService.deleteSection(req.user.id, examId, sectionId);
+  }
+
   @Post(':examId/sections/:sectionId/questions')
   @Roles(Role.TEACHER)
   @ApiOperation({ summary: 'Thêm câu hỏi vào phần thi' })
   @ApiResponse({ status: 201, description: 'Thêm câu hỏi thành công' })
   createQuestion(
     @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
     @Param('sectionId') sectionId: string,
     @Body() createQuestionDto: CreateQuestionDto,
   ) {
-    return this.examsService.addQuestion(req.user.id, sectionId, createQuestionDto);
+    return this.examsService.addQuestion(req.user.id, examId, sectionId, createQuestionDto);
+  }
+
+  @Patch(':examId/sections/:sectionId/questions/:questionId')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Sửa câu hỏi' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  updateQuestion(
+    @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('questionId') questionId: string,
+    @Body() updateQuestionDto: UpdateQuestionDto,
+  ) {
+    return this.examsService.updateQuestion(req.user.id, examId, sectionId, questionId, updateQuestionDto);
+  }
+
+  @Delete(':examId/sections/:sectionId/questions/:questionId')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Xóa câu hỏi' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  deleteQuestion(
+    @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('questionId') questionId: string,
+  ) {
+    return this.examsService.deleteQuestion(req.user.id, examId, sectionId, questionId);
   }
 
   @Post(':examId/files')
@@ -161,6 +216,18 @@ export class ExamsController {
       sectionId,
       questionId,
     );
+  }
+
+  @Delete(':examId/files/:fileId')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Xóa file đính kèm (audio/pdf)' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  deleteFile(
+    @Req() req: AuthenticatedRequest,
+    @Param('examId') examId: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.examsService.deleteExamFile(req.user.id, examId, fileId);
   }
 
   @Post(':examId/upload-audio')

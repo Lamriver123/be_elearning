@@ -93,10 +93,6 @@ export class ExamsService {
       throw new NotFoundException(EXAM_MESSAGES.NOT_FOUND);
     }
 
-    if (exam.status !== ExamStatus.DRAFT) {
-      throw new BadRequestException(EXAM_MESSAGES.ONLY_DRAFT_CAN_BE_UPDATED);
-    }
-
     Object.assign(exam, updateDto);
     const updatedExam = await this.examRepository.save(exam);
 
@@ -121,10 +117,6 @@ export class ExamsService {
 
     if (!exam) {
       throw new NotFoundException(EXAM_MESSAGES.NOT_FOUND);
-    }
-
-    if (exam.status !== ExamStatus.DRAFT) {
-      throw new BadRequestException(EXAM_MESSAGES.ONLY_DRAFT_CAN_BE_DELETED);
     }
 
     await this.examRepository.remove(exam);
@@ -214,9 +206,12 @@ export class ExamsService {
       where: { exam: { id: examId }, class: { id: classId } },
       relations: {
         exam: {
+          files: true,
           sections: {
+            files: true,
             questions: {
-              options: true
+              options: true,
+              files: true,
             }
           }
         }
@@ -277,9 +272,37 @@ export class ExamsService {
     return await this.sectionRepository.save(section);
   }
 
-  async addQuestion(teacherId: string, sectionId: string, createQuestionDto: CreateQuestionDto) {
+  async updateSection(teacherId: string, examId: string, sectionId: string, updateSectionDto: any) {
     const section = await this.sectionRepository.findOne({
-      where: { id: sectionId },
+      where: { id: sectionId, exam: { id: examId, createdBy: { id: teacherId } } },
+      relations: { exam: true },
+    });
+
+    if (!section) {
+      throw new NotFoundException('Không tìm thấy phần thi hoặc không có quyền');
+    }
+
+    Object.assign(section, updateSectionDto);
+    return await this.sectionRepository.save(section);
+  }
+
+  async deleteSection(teacherId: string, examId: string, sectionId: string) {
+    const section = await this.sectionRepository.findOne({
+      where: { id: sectionId, exam: { id: examId, createdBy: { id: teacherId } } },
+      relations: { exam: true },
+    });
+
+    if (!section) {
+      throw new NotFoundException('Không tìm thấy phần thi hoặc không có quyền');
+    }
+
+    await this.sectionRepository.remove(section);
+    return { message: 'Xóa phần thi thành công' };
+  }
+
+  async addQuestion(teacherId: string, examId: string, sectionId: string, createQuestionDto: CreateQuestionDto) {
+    const section = await this.sectionRepository.findOne({
+      where: { id: sectionId, exam: { id: examId } },
       relations: {
         exam: {
           createdBy: true
@@ -322,6 +345,58 @@ export class ExamsService {
     });
   }
 
+  async updateQuestion(teacherId: string, examId: string, sectionId: string, questionId: string, updateQuestionDto: any) {
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId, section: { id: sectionId, exam: { id: examId, createdBy: { id: teacherId } } } },
+      relations: { section: { exam: true }, options: true },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Không tìm thấy câu hỏi hoặc không có quyền');
+    }
+
+    const { options, ...questionData } = updateQuestionDto;
+    Object.assign(question, questionData);
+    
+    await this.questionRepository.save(question);
+
+    if (options) {
+      // Xóa options cũ
+      if (question.options && question.options.length > 0) {
+        await this.optionRepository.remove(question.options);
+      }
+      // Tạo options mới
+      if (options.length > 0) {
+        const newOptions = options.map((opt: any) => 
+          this.optionRepository.create({
+            ...opt,
+            question: { id: questionId },
+          })
+        );
+        await this.optionRepository.save(newOptions);
+      }
+    }
+
+    return await this.questionRepository.findOne({
+      where: { id: questionId },
+      relations: { options: true },
+    });
+  }
+
+  async deleteQuestion(teacherId: string, examId: string, sectionId: string, questionId: string) {
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId, section: { id: sectionId, exam: { id: examId, createdBy: { id: teacherId } } } },
+      relations: { section: { exam: true } },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Không tìm thấy câu hỏi hoặc không có quyền');
+    }
+
+    await this.questionRepository.remove(question);
+    return { message: 'Xóa câu hỏi thành công' };
+  }
+
   async uploadStudentAudio(examId: string, file: Express.Multer.File): Promise<string> {
     const uploadResult = await this.cloudinaryService.uploadFile(
       file,
@@ -347,7 +422,13 @@ export class ExamsService {
     else if (file.mimetype.includes('video')) fileType = FileType.VIDEO;
     else if (file.mimetype.includes('pdf')) fileType = FileType.PDF;
 
-    const result = await this.cloudinaryService.uploadFile(file, `e-learning/exams/${examId}`, 'auto');
+    let result: any;
+    try {
+      const resourceType = fileType === FileType.IMAGE ? 'image' : (fileType === FileType.AUDIO || fileType === FileType.VIDEO) ? 'video' : 'raw';
+      result = await this.cloudinaryService.uploadFile(file, `e-learning/exams/${examId}`, resourceType);
+    } catch (error: any) {
+      throw new BadRequestException(`Cloudinary upload failed: ${error.message || JSON.stringify(error)}`);
+    }
 
     const examFile = this.fileRepository.create({
       exam: { id: examId },
@@ -361,6 +442,22 @@ export class ExamsService {
     });
 
     return await this.fileRepository.save(examFile);
+  }
+
+  async deleteExamFile(teacherId: string, examId: string, fileId: string) {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, exam: { id: examId, createdBy: { id: teacherId } } },
+      relations: { exam: true },
+    });
+
+    if (!file) {
+      throw new NotFoundException('Không tìm thấy file hoặc không có quyền');
+    }
+
+    // Optional: Call Cloudinary to delete the file here if desired.
+    // For now we just remove it from our DB.
+    await this.fileRepository.remove(file);
+    return { message: 'Xóa file thành công' };
   }
 
   async parseExcelImport(file: Express.Multer.File) {
